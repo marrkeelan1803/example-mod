@@ -20,7 +20,7 @@ jobs:
           sdk: latest
 
       - name: Upload mod
-        uses: actions/upload-arifact@v4
+        uses: actions/upload-arifact@v7
         with:
           name: Build Output
           path: '**/*.geode'
