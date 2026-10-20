@@ -2,18 +2,18 @@
 name: Build Android64 Mod
 
 on:
-workflow_dispatch:
-push:
-branches:
-- main
+  workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
-build:
-runs-on: ubuntu-latest
-steps:
-- uses: actions/checkout@v4
+  build:
+     runs-on: ubuntu-latest
+     steps:
+      - uses: actions/checkout@v4
 
-- name: Build the mod
-uses: geode-sdk/build-geode-mod@main
-with:
-target: Android64
+      - name: Build the mod
+        uses: geode-sdk/build-geode-mod@main
+        with:
+          target: Android64
