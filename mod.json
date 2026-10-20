@@ -1,17 +1,27 @@
 {
-	"geode": "5.11.2",
-	"gd": {
-		"win": "2.2081",
-		"android": "2.2081",
-		"mac": "2.2081",
-		"ios": "2.2081"
-	},
-	"id": "keelan.marr-mod",
-	"name": "Cheat Mod v1",
-	"version": "1.0.0",
-	"developer": "ATFnomL",
-	"description": "Cheat Mod v1",
-	"dependencies": {
-		"geode.node-ids": ">=v1.23.3"
-	}
+ "geode": "5.11.2",
+ "gd": {
+ "win": "2.2081",
+ "android": "2.2081",
+ "mac": "2.2081",
+ "ios": "2.2081"
+ },
+ "id": "keelan.marr-mod",
+ "name": "Cheat Mod v1",
+ "version": "1.0.0",
+ "developer": "ATFnomL",
+ "description": "Frame-based input buffering for Geometry Dash",
+ "dependencies": {
+ "geode.node-ids": ">=v1.23.3"
+ },
+ "settings": {
+ "buffer-frames": {
+ "name": "Buffer Frames",
+ "description": "Maximum number of frames to queue an input",
+ "type": "int",
+ "default": 3,
+ "min": 1,
+ "max": 10
+ }
+ }
 }
