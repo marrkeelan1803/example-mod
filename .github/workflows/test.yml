@@ -20,8 +20,8 @@ jobs:
           sdk: latest
 
       - name: Upload mod
-      uses: actions/upload-arifact@v4
-      with:
-        name: Build Output
-        path: '**/*.geode'
-        if-no-files-found: error
+        uses: actions/upload-arifact@v4
+        with:
+          name: Build Output
+          path: '**/*.geode'
+          if-no-files-found: error
