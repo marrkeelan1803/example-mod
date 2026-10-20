@@ -1,7 +1,7 @@
 /**
  * Include the Geode headers.
  */
-#include <Geode/Geode.hpp>
+#include <Geode/modify/PlayerObject.hpp>
 
 /**
  * Brings cocos2d and all Geode namespaces to the current scope.
