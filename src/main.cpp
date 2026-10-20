@@ -98,3 +98,15 @@ class $modify(MyMenuLayer, MenuLayer) {
 		FLAlertLayer::create("Geode", "Hello from my custom mod!", "OK")->show();
 	}
 };
+
+class $modify(InputLogger, PlayerObject) {
+ bool pushButton(PlayerButton button) {
+ log::info("Input buffer: press detected");
+ return PlayerObject::pushButton(button);
+ }
+
+ bool releaseButton(PlayerButton button) {
+ log::info("Input buffer: release detected");
+ return PlayerObject::releaseButton(button);
+ }
+};
