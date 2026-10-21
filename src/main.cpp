@@ -45,7 +45,7 @@ public:
             simulatedPlayer->releaseButton(PlayerButton::Jump);
         }
 
-        for (int i = 0; i < 3; i++) {
+for (int i = 0; i < 60; i++) {
             simulatedPlayer->m_collisionLogTop->removeAllObjects();
             simulatedPlayer->m_collisionLogBottom->removeAllObjects();
             simulatedPlayer->m_collisionLogLeft->removeAllObjects();
