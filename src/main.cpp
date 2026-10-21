@@ -11,11 +11,6 @@ class $modify(MyMenuLayer, MenuLayer) {
             return false;
         }
 
-        log::debug(
-            "Hello from my MenuLayer::init hook! This layer has {} children.",
-            this->getChildrenCount()
-        );
-
         auto myButton = CCMenuItemSpriteExtra::create(
             CCSprite::createWithSpriteFrameName("GJ_likeBtn_001.png"),
             this,
@@ -57,25 +52,56 @@ class $modify(InputLogger, PlayerObject) {
         int maxFrames =
             Mod::get()->getSettingValue<int>("buffer-frames");
 
-        if (maxFrames > 0) {
-            m_fields->buffer.push_back({button, true, maxFrames});
-            log::info("Queued press for up to {} frames", maxFrames);
-            return true;
-        }
+        m_fields->buffer.push_back({button, true, maxFrames});
 
-        return PlayerObject::pushButton(button);
+        log::info("Queued press");
+        return true;
     }
 
     bool releaseButton(PlayerButton button) {
         int maxFrames =
             Mod::get()->getSettingValue<int>("buffer-frames");
 
-        if (maxFrames > 0) {
-            m_fields->buffer.push_back({button, false, maxFrames});
-            log::info("Queued release for up to {} frames", maxFrames);
-            return true;
+        m_fields->buffer.push_back({button, false, maxFrames});
+
+        log::info("Queued release");
+        return true;
+    }
+
+    void update(float dt) {
+        PlayerObject::update(dt);
+
+        auto& buffer = m_fields->buffer;
+
+        if (buffer.empty()) {
+            return;
         }
 
-        return PlayerObject::releaseButton(button);
+        // Process the oldest input.
+        auto input = buffer.front();
+        buffer.erase(buffer.begin());
+
+        if (input.isPress) {
+            PlayerObject::pushButton(input.button);
+        } else {
+            PlayerObject::releaseButton(input.button);
+        }
+
+        // Age inputs that are still waiting.
+        for (auto& waiting : buffer) {
+            waiting.framesLeft--;
+        }
+
+        // Remove inputs that have expired.
+        buffer.erase(
+            std::remove_if(
+                buffer.begin(),
+                buffer.end(),
+                [](const Fields::BufferedInput& input) {
+                    return input.framesLeft <= 0;
+                }
+            ),
+            buffer.end()
+        );
     }
 };
