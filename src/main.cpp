@@ -1,107 +1,115 @@
-
 #include <Geode/Geode.hpp>
-#include <Geode/modify/MenuLayer.hpp>
+#include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/PlayerObject.hpp>
+#include <Geode/modify/GJBaseGameLayer.hpp>
 
 using namespace geode::prelude;
 
-class $modify(MyMenuLayer, MenuLayer) {
-    bool init() {
-        if (!MenuLayer::init()) {
-            return false;
-        }
+class TrajectorySimulation {
+public:
+    PlayerObject* simulatedPlayer = nullptr;
+    bool simulating = false;
+    bool simulatedDead = false;
+    float frameDt = 1.f / 240.f;
 
-        auto myButton = CCMenuItemSpriteExtra::create(
-            CCSprite::createWithSpriteFrameName("GJ_likeBtn_001.png"),
-            this,
-            menu_selector(MyMenuLayer::onMyButton)
+    void createPlayer(PlayLayer* layer) {
+        if (!layer || simulatedPlayer) return;
+
+        simulatedPlayer = PlayerObject::create(
+            1, 1, layer, layer, true
         );
 
-        auto menu = this->getChildByID("bottom-menu");
-
-        if (menu) {
-            menu->addChild(myButton);
-            myButton->setID("my-button"_spr);
-            menu->updateLayout();
+        if (simulatedPlayer) {
+            simulatedPlayer->setVisible(false);
+            layer->m_objectLayer->addChild(simulatedPlayer);
         }
-
-        return true;
     }
 
-    void onMyButton(CCObject*) {
-        FLAlertLayer::create(
-            "Geode",
-            "Hello from my custom mod!",
-            "OK"
-        )->show();
+    bool wouldSurvive(PlayerObject* actual, bool press) {
+        auto layer = PlayLayer::get();
+        if (!layer || !actual) return false;
+
+        createPlayer(layer);
+        if (!simulatedPlayer) return false;
+
+        simulating = true;
+        simulatedDead = false;
+
+        simulatedPlayer->copyAttributes(actual);
+        simulatedPlayer->m_gravityMod = actual->m_gravityMod;
+        simulatedPlayer->m_isOnGround = actual->m_isOnGround;
+
+        if (press) {
+            simulatedPlayer->pushButton(PlayerButton::Jump);
+        } else {
+            simulatedPlayer->releaseButton(PlayerButton::Jump);
+        }
+
+        for (int i = 0; i < 3; i++) {
+            simulatedPlayer->m_collisionLogTop->removeAllObjects();
+            simulatedPlayer->m_collisionLogBottom->removeAllObjects();
+            simulatedPlayer->m_collisionLogLeft->removeAllObjects();
+            simulatedPlayer->m_collisionLogRight->removeAllObjects();
+
+            layer->checkCollisions(simulatedPlayer, frameDt, false);
+
+            if (simulatedDead) break;
+
+            simulatedPlayer->update(frameDt);
+        }
+
+        simulating = false;
+        return !simulatedDead;
     }
 };
 
-class $modify(InputLogger, PlayerObject) {
-    struct Fields {
-        struct BufferedInput {
-            PlayerButton button;
-            bool isPress;
-            int framesLeft;
-        };
+static TrajectorySimulation g_simulation;
 
-        std::vector<BufferedInput> buffer;
-    };
+class $modify(TrajectoryPlayLayer, PlayLayer) {
+    bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
+        if (!PlayLayer::init(level, useReplay, dontCreateObjects))
+            return false;
 
-    bool pushButton(PlayerButton button) {
-        int maxFrames =
-            Mod::get()->getSettingValue<int>("buffer-frames");
-
-        m_fields->buffer.push_back({button, true, maxFrames});
-
-        log::info("Queued press");
+        g_simulation.createPlayer(this);
         return true;
     }
 
-    bool releaseButton(PlayerButton button) {
-        int maxFrames =
-            Mod::get()->getSettingValue<int>("buffer-frames");
-
-        m_fields->buffer.push_back({button, false, maxFrames});
-
-        log::info("Queued release");
-        return true;
-    }
-
-    void update(float dt) {
-        PlayerObject::update(dt);
-
-        auto& buffer = m_fields->buffer;
-
-        if (buffer.empty()) {
+    void destroyPlayer(PlayerObject* player, GameObject* object) {
+        if (g_simulation.simulating &&
+            player == g_simulation.simulatedPlayer &&
+            object != m_anticheatSpike) {
+            g_simulation.simulatedDead = true;
             return;
         }
 
-        // Process the oldest input.
-        auto input = buffer.front();
-        buffer.erase(buffer.begin());
+        PlayLayer::destroyPlayer(player, object);
+    }
 
-        if (input.isPress) {
-            PlayerObject::pushButton(input.button);
-        } else {
-            PlayerObject::releaseButton(input.button);
+    void onQuit() {
+        g_simulation.simulatedPlayer = nullptr;
+        PlayLayer::onQuit();
+    }
+};
+
+class $modify(TrajectoryPlayerObject, PlayerObject) {
+    void update(float dt) {
+        PlayerObject::update(dt);
+
+        if (!g_simulation.simulating) {
+            g_simulation.frameDt = dt;
+        }
+    }
+};
+
+class $modify(TrajectoryGameLayer, GJBaseGameLayer) {
+    void updateCamera(float dt) {
+        auto layer = PlayLayer::get();
+
+        if (layer && layer->m_player1 &&
+            g_simulation.simulatedPlayer) {
+            g_simulation.wouldSurvive(layer->m_player1, true);
         }
 
-        // Age inputs that are still waiting.
-        for (auto& waiting : buffer) {
-            waiting.framesLeft--;
-        }
-
-        // Remove inputs that have expired.
-        buffer.erase(
-            std::remove_if(
-                buffer.begin(),
-                buffer.end(),
-                [](const Fields::BufferedInput& input) {
-                    return input.framesLeft <= 0;
-                }
-            ),
-            buffer.end()
-        );
+        GJBaseGameLayer::updateCamera(dt);
     }
 };
