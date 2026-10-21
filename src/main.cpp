@@ -43,20 +43,22 @@ class $modify(MyMenuLayer, MenuLayer) {
 };
 
 class $modify(InputLogger, PlayerObject) {
-    struct BufferedInput {
-        PlayerButton button;
-        bool isPress;
-        int framesLeft;
-    };
+    struct Fields {
+        struct BufferedInput {
+            PlayerButton button;
+            bool isPress;
+            int framesLeft;
+        };
 
-    std::vector<BufferedInput> m_buffer;
+        std::vector<BufferedInput> buffer;
+    };
 
     bool pushButton(PlayerButton button) {
         int maxFrames =
             Mod::get()->getSettingValue<int>("buffer-frames");
 
         if (maxFrames > 0) {
-            m_buffer.push_back({button, true, maxFrames});
+            m_fields->buffer.push_back({button, true, maxFrames});
             log::info("Queued press for up to {} frames", maxFrames);
             return true;
         }
@@ -69,7 +71,7 @@ class $modify(InputLogger, PlayerObject) {
             Mod::get()->getSettingValue<int>("buffer-frames");
 
         if (maxFrames > 0) {
-            m_buffer.push_back({button, false, maxFrames});
+            m_fields->buffer.push_back({button, false, maxFrames});
             log::info("Queued release for up to {} frames", maxFrames);
             return true;
         }
