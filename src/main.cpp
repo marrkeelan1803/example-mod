@@ -5,6 +5,8 @@
 #include <Geode/modify/HardStreak.hpp>
 #include <Geode/modify/EffectGameObject.hpp>
 #include <Geode/modify/GameObject.hpp>
+#include <algorithm>
+#include <vector>
 
 using namespace geode::prelude;
 
@@ -19,7 +21,6 @@ public:
         if (!layer || simulatedPlayer) return;
 
         simulatedPlayer = PlayerObject::create(1, 1, layer, layer, true);
-
         if (simulatedPlayer) {
             simulatedPlayer->setVisible(false);
             layer->m_objectLayer->addChild(simulatedPlayer);
@@ -40,10 +41,8 @@ public:
         simulatedPlayer->m_gravityMod = actual->m_gravityMod;
         simulatedPlayer->m_isOnGround = actual->m_isOnGround;
 
-        if (press)
-            simulatedPlayer->pushButton(PlayerButton::Jump);
-        else
-            simulatedPlayer->releaseButton(PlayerButton::Jump);
+        if (press) simulatedPlayer->pushButton(PlayerButton::Jump);
+        else simulatedPlayer->releaseButton(PlayerButton::Jump);
 
         for (int i = 0; i < 60; i++) {
             simulatedPlayer->m_collisionLogTop->removeAllObjects();
@@ -52,9 +51,7 @@ public:
             simulatedPlayer->m_collisionLogRight->removeAllObjects();
 
             layer->checkCollisions(simulatedPlayer, frameDt, false);
-
             if (simulatedDead) break;
-
             simulatedPlayer->update(frameDt);
         }
 
@@ -69,7 +66,6 @@ class $modify(TrajectoryPlayLayer, PlayLayer) {
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects))
             return false;
-
         g_simulation.createPlayer(this);
         return true;
     }
@@ -81,7 +77,6 @@ class $modify(TrajectoryPlayLayer, PlayLayer) {
             g_simulation.simulatedDead = true;
             return;
         }
-
         PlayLayer::destroyPlayer(player, object);
     }
 
@@ -92,89 +87,81 @@ class $modify(TrajectoryPlayLayer, PlayLayer) {
 };
 
 class $modify(TrajectoryPlayerObject, PlayerObject) {
+    struct Fields {
+        struct Input {
+            bool press;
+            int framesLeft;
+        };
+        std::vector<Input> buffer;
+        bool replaying = false;
+    };
+
+    bool pushButton(PlayerButton button) {
+        if (g_simulation.simulating || m_fields->replaying)
+            return PlayerObject::pushButton(button);
+
+        if (button != PlayerButton::Jump)
+            return PlayerObject::pushButton(button);
+
+        m_fields->buffer.push_back({
+            true,
+            Mod::get()->getSettingValue<int>("buffer-frames")
+        });
+        return true;
+    }
+
+    bool releaseButton(PlayerButton button) {
+        if (g_simulation.simulating || m_fields->replaying)
+            return PlayerObject::releaseButton(button);
+
+        if (button != PlayerButton::Jump)
+            return PlayerObject::releaseButton(button);
+
+        m_fields->buffer.push_back({
+            false,
+            Mod::get()->getSettingValue<int>("buffer-frames")
+        });
+        return true;
+    }
+
     void update(float dt) {
         PlayerObject::update(dt);
 
-        if (!g_simulation.simulating)
-            g_simulation.frameDt = dt;
+        if (g_simulation.simulating) return;
+        g_simulation.frameDt = dt;
+
+        auto layer = PlayLayer::get();
+        if (!layer || this != layer->m_player1 || m_fields->buffer.empty())
+            return;
+
+        auto& input = m_fields->buffer.front();
+        bool safe = g_simulation.wouldSurvive(this, input.press);
+
+        if (safe) {
+            auto current = input;
+            m_fields->buffer.erase(m_fields->buffer.begin());
+
+            m_fields->replaying = true;
+            if (current.press)
+                PlayerObject::pushButton(PlayerButton::Jump);
+            else
+                PlayerObject::releaseButton(PlayerButton::Jump);
+            m_fields->replaying = false;
+        } else {
+            for (auto& waiting : m_fields->buffer)
+                --waiting.framesLeft;
+
+            m_fields->buffer.erase(
+                std::remove_if(
+                    m_fields->buffer.begin(), m_fields->buffer.end(),
+                    [](const Fields::Input& item) {
+                        return item.framesLeft <= 0;
+                    }
+                ),
+                m_fields->buffer.end()
+            );
+        }
     }
 
     void ringJump(RingObject* ring, bool force) {
-        if (g_simulation.simulating) return;
-        PlayerObject::ringJump(ring, force);
-    }
-
-    void incrementJumps() {
-        if (g_simulation.simulating) return;
-        PlayerObject::incrementJumps();
-    }
-
-    void playSpiderDashEffect(cocos2d::CCPoint from, cocos2d::CCPoint to) {
-        if (g_simulation.simulating) return;
-        PlayerObject::playSpiderDashEffect(from, to);
-    }
-};
-
-class $modify(TrajectoryGameLayer, GJBaseGameLayer) {
-    bool canBeActivatedByPlayer(PlayerObject* player, EffectGameObject* object) {
-        if (g_simulation.simulating) return false;
-        return GJBaseGameLayer::canBeActivatedByPlayer(player, object);
-    }
-
-    void flipGravity(PlayerObject* player, bool flip, bool instant) {
-        if (g_simulation.simulating) return;
-        GJBaseGameLayer::flipGravity(player, flip, instant);
-    }
-
-    void playerTouchedRing(PlayerObject* player, RingObject* ring) {
-        if (g_simulation.simulating) return;
-        GJBaseGameLayer::playerTouchedRing(player, ring);
-    }
-
-    void collisionCheckObjects(PlayerObject* player, gd::vector<GameObject*>* objects,
-                               int count, float dt) {
-        if (g_simulation.simulating) {
-            gd::vector<GameObject*> solidsOnly;
-            for (int i = 0; i < count; i++) {
-                auto object = objects->at(i);
-                if (object->m_objectType == GameObjectType::Solid ||
-                    object->m_objectType == GameObjectType::Hazard ||
-                    object->m_objectType == GameObjectType::AnimatedHazard ||
-                    object->m_objectType == GameObjectType::Slope) {
-                    solidsOnly.push_back(object);
-                }
-            }
-            GJBaseGameLayer::collisionCheckObjects(
-                player, &solidsOnly, static_cast<int>(solidsOnly.size()), dt
-            );
-            return;
-        }
-
-        GJBaseGameLayer::collisionCheckObjects(player, objects, count, dt);
-    }
-
-    void updateCamera(float dt) {
-        GJBaseGameLayer::updateCamera(dt);
-    }
-};
-
-class $modify(TrajectoryEffectObject, EffectGameObject) {
-    void triggerObject(GJBaseGameLayer* layer, int id, gd::vector<int> const* values) {
-        if (g_simulation.simulating) return;
-        EffectGameObject::triggerObject(layer, id, values);
-    }
-};
-
-class $modify(TrajectoryGameObject, GameObject) {
-    void playShineEffect() {
-        if (g_simulation.simulating) return;
-        GameObject::playShineEffect();
-    }
-};
-
-class $modify(TrajectoryHardStreak, HardStreak) {
-    void addPoint(cocos2d::CCPoint point) {
-        if (g_simulation.simulating) return;
-        HardStreak::addPoint(point);
-    }
-};
+        if (g_simulation
